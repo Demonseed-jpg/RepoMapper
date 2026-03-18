@@ -22,3 +22,7 @@ repomap-mcp = "repomap_server:main"
 
 [tool.setuptools]
 py-modules = ["repomap_server", "repomap", "repomap_class", "utils", "importance", "scm"]
+
+[tool.setuptools.data-files]
+"queries/tree-sitter-language-pack" = ["queries/tree-sitter-language-pack/*.scm"]
+"queries/tree-sitter-languages" = ["queries/tree-sitter-languages/*.scm"]

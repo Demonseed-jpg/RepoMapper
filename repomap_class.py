@@ -594,7 +594,6 @@ class RepoMap:
             return None, FileReport({}, 0, 0, 0)  # Ensure consistent return type
         
         if map_string is None:
-            print("map_string is None")
             return None, file_report
         
         if self.verbose:

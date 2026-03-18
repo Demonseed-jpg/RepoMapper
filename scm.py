@@ -2,6 +2,7 @@
 SCM file handling for RepoMap.
 """
 
+import sys
 from pathlib import Path
 from typing import Optional
 
@@ -45,15 +46,21 @@ def get_scm_fname(lang: str) -> Optional[str]:
         'typescript': 'typescript-tags.scm',
     }
     
-    if lang in scm_files:
-        scm_filename = scm_files[lang]
-        # Search in tree-sitter-language-pack
-        scm_path = Path(__file__).parent / "queries" / "tree-sitter-language-pack" / scm_filename
-        if scm_path.exists():
-            return str(scm_path)
-        # Search in tree-sitter-languages
-        scm_path = Path(__file__).parent / "queries" / "tree-sitter-languages" / scm_filename
-        if scm_path.exists():
-            return str(scm_path)
+    if lang not in scm_files:
+        return None
+
+    scm_filename = scm_files[lang]
+
+    # Search paths: development (relative to this file) and installed (sys.prefix)
+    search_roots = [
+        Path(__file__).parent,
+        Path(sys.prefix),
+    ]
+
+    for root in search_roots:
+        for subdir in ("tree-sitter-language-pack", "tree-sitter-languages"):
+            scm_path = root / "queries" / subdir / scm_filename
+            if scm_path.exists():
+                return str(scm_path)
     
     return None
