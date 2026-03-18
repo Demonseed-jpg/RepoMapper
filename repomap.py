@@ -8,6 +8,7 @@ Uses Tree-sitter for parsing and PageRank for ranking importance.
 """
 
 import argparse
+import json
 import os
 import sys
 from pathlib import Path
@@ -50,6 +51,84 @@ def tool_warning(message):
 def tool_error(message):
     """Print error messages."""
     print(f"Error: {message}", file=sys.stderr)
+
+
+def run_search(args):
+    """Run search mode — find identifiers in the tag index and output JSON."""
+    root_path = Path(args.root).resolve()
+    query = args.search
+    query_lower = query.lower()
+
+    repo_map = RepoMap(
+        root=str(root_path),
+        token_counter_func=lambda text: count_tokens(text, args.model),
+        file_reader_func=read_text,
+        output_handler_funcs={
+            'info': lambda *m: None,
+            'warning': tool_warning,
+            'error': tool_error,
+        },
+        verbose=False,
+        exclude_unranked=True,
+    )
+
+    # Determine search scope
+    search_paths = args.paths if args.paths else [str(root_path)]
+    all_files = []
+    for p in search_paths:
+        all_files.extend(find_src_files(p))
+
+    # Extract tags from all files
+    all_tags = []
+    for file_path in all_files:
+        try:
+            rel_path = str(Path(file_path).relative_to(root_path))
+        except ValueError:
+            rel_path = file_path
+        try:
+            tags = repo_map.get_tags(file_path, rel_path)
+            all_tags.extend(tags)
+        except Exception:
+            continue
+
+    # Filter by query (case-insensitive substring match)
+    matching = []
+    for tag in all_tags:
+        if query_lower not in tag.name.lower():
+            continue
+        if args.defs_only and tag.kind != "def":
+            continue
+        matching.append(tag)
+
+    # Sort: definitions first, then by match position in name
+    matching.sort(key=lambda t: (t.kind != "def", t.name.lower().find(query_lower)))
+
+    # Limit results
+    matching = matching[:args.max_results]
+
+    # Format as JSON
+    results = []
+    for tag in matching:
+        file_path = str(Path(root_path) / tag.rel_fname)
+
+        # Render context via tree
+        start_line = max(1, tag.line - 2)
+        end_line = tag.line + 2
+        context_range = list(range(start_line, end_line + 1))
+        try:
+            context = repo_map.render_tree(file_path, tag.rel_fname, context_range)
+        except Exception:
+            context = ""
+
+        results.append({
+            "file": tag.rel_fname,
+            "line": tag.line,
+            "name": tag.name,
+            "kind": tag.kind,
+            "context": context or "",
+        })
+
+    print(json.dumps(results, indent=2))
 
 
 def main():
@@ -138,8 +217,33 @@ Examples:
         action="store_true",
         help="Exclude files with Page Rank 0 from the map"
     )
+
+    # Search mode flags
+    parser.add_argument(
+        "--search",
+        metavar="QUERY",
+        help="Search for an identifier in the tag index (outputs JSON)"
+    )
+
+    parser.add_argument(
+        "--defs-only",
+        action="store_true",
+        help="Only return definition sites (used with --search)"
+    )
+
+    parser.add_argument(
+        "--max-results",
+        type=int,
+        default=50,
+        help="Maximum number of search results (default: 50)"
+    )
     
     args = parser.parse_args()
+
+    # --- Search mode ---
+    if args.search:
+        run_search(args)
+        return
     
     # Set up token counter with specified model
     def token_counter(text: str) -> int:
@@ -177,8 +281,6 @@ Examples:
     # other_files for RepoMap are the effective_other_files, resolved after expansion.
     other_files = [str(Path(f).resolve()) for f in effective_other_files_unresolved]
 
-    print(f"Chat files: {chat_files}")
-    
     # Convert mentioned files to sets
     mentioned_fnames = set(args.mentioned_files) if args.mentioned_files else None
     mentioned_idents = set(args.mentioned_idents) if args.mentioned_idents else None
@@ -197,7 +299,7 @@ Examples:
     
     # Generate the map
     try:
-        map_content = repo_map.get_repo_map(
+        map_content, file_report = repo_map.get_repo_map(
             chat_files=chat_files,
             other_files=other_files,
             mentioned_fnames=mentioned_fnames,

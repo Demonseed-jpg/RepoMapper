@@ -1,0 +1,13 @@
+Metadata-Version: 2.4
+Name: repomapper
+Version: 0.1.0
+Requires-Python: >=3.12
+License-File: LICENSE
+Requires-Dist: diskcache>=5.6.0
+Requires-Dist: fastmcp>=2.11.3
+Requires-Dist: grep-ast>=0.3.0
+Requires-Dist: networkx>=3.0
+Requires-Dist: pygments>=2.14.0
+Requires-Dist: tiktoken>=0.5.0
+Requires-Dist: tree-sitter>=0.20.0
+Dynamic: license-file
